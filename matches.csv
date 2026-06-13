@@ -1,0 +1,211 @@
+from __future__ import annotations
+
+from pathlib import Path
+import numpy as np
+import pandas as pd
+import streamlit as st
+from score_api import fetch_api_football_results, merge_results
+
+APP_DIR = Path(__file__).parent
+DATA_FILE = APP_DIR / "matches.csv"
+
+# Starter Elo ratings. Edit these as your model improves.
+BASE_ELO = {
+    "Argentina": 1870, "France": 1860, "Brazil": 1845, "England": 1835, "Spain": 1825,
+    "Portugal": 1815, "Netherlands": 1790, "Belgium": 1760, "Germany": 1755, "Uruguay": 1740,
+    "Croatia": 1725, "Colombia": 1710, "United States": 1685, "Mexico": 1680, "Japan": 1670,
+    "Morocco": 1665, "Switzerland": 1655, "Senegal": 1645, "Ecuador": 1635, "Austria": 1625,
+    "South Korea": 1615, "Turkey": 1605, "Iran": 1595, "Ivory Coast": 1585, "Scotland": 1575,
+    "Norway": 1570, "Australia": 1560, "Egypt": 1550, "Canada": 1545, "Czechia": 1540,
+    "Paraguay": 1535, "Ghana": 1525, "Algeria": 1520, "Saudi Arabia": 1505, "Bosnia and Herzegovina": 1495,
+    "South Africa": 1485, "Panama": 1475, "Qatar": 1465, "Tunisia": 1460, "Iraq": 1450,
+    "Uzbekistan": 1440, "New Zealand": 1420, "DR Congo": 1415, "Jordan": 1395, "Cape Verde": 1385,
+    "Haiti": 1375, "Curacao": 1340,
+}
+
+st.set_page_config(page_title="World Cup Predictor", page_icon="⚽", layout="wide")
+st.title("⚽ World Cup Predictor")
+st.caption("Update scores manually or from an API feed, recalculate standings, and simulate advancement odds as the tournament unfolds.")
+
+@st.cache_data
+def load_matches() -> pd.DataFrame:
+    df = pd.read_csv(DATA_FILE)
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    return df
+
+
+def normalize_scores(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df["score1"] = pd.to_numeric(df["score1"], errors="coerce")
+    df["score2"] = pd.to_numeric(df["score2"], errors="coerce")
+    df["status"] = np.where(df["score1"].notna() & df["score2"].notna(), "Complete", df["status"].fillna("Scheduled"))
+    return df
+
+
+def standings_for_group(matches: pd.DataFrame, group: str) -> pd.DataFrame:
+    group_matches = matches[matches["group"] == group]
+    teams = sorted(set(group_matches["team1"]).union(group_matches["team2"]))
+    rows = []
+    for team in teams:
+        rows.append({"Team": team, "Pld": 0, "W": 0, "D": 0, "L": 0, "GF": 0, "GA": 0, "GD": 0, "Pts": 0})
+    table = pd.DataFrame(rows).set_index("Team")
+
+    completed = group_matches[group_matches["status"].eq("Complete")]
+    for _, m in completed.iterrows():
+        t1, t2 = m["team1"], m["team2"]
+        s1, s2 = int(m["score1"]), int(m["score2"])
+        table.loc[t1, ["Pld", "GF", "GA"]] += [1, s1, s2]
+        table.loc[t2, ["Pld", "GF", "GA"]] += [1, s2, s1]
+        if s1 > s2:
+            table.loc[t1, ["W", "Pts"]] += [1, 3]
+            table.loc[t2, "L"] += 1
+        elif s2 > s1:
+            table.loc[t2, ["W", "Pts"]] += [1, 3]
+            table.loc[t1, "L"] += 1
+        else:
+            table.loc[t1, ["D", "Pts"]] += [1, 1]
+            table.loc[t2, ["D", "Pts"]] += [1, 1]
+    table["GD"] = table["GF"] - table["GA"]
+    return table.reset_index().sort_values(["Pts", "GD", "GF", "Team"], ascending=[False, False, False, True])
+
+
+def win_draw_loss_probs(team1: str, team2: str, draw_rate: float = 0.25) -> tuple[float, float, float]:
+    e1, e2 = BASE_ELO.get(team1, 1500), BASE_ELO.get(team2, 1500)
+    p1_raw = 1 / (1 + 10 ** ((e2 - e1) / 400))
+    p_draw = draw_rate * (1 - abs(p1_raw - 0.5)) / 0.5
+    p_draw = float(np.clip(p_draw, 0.08, 0.32))
+    p1 = p1_raw * (1 - p_draw)
+    p2 = (1 - p1_raw) * (1 - p_draw)
+    return p1, p_draw, p2
+
+
+def simulate_score(team1: str, team2: str, rng: np.random.Generator) -> tuple[int, int]:
+    p1, pd_, p2 = win_draw_loss_probs(team1, team2)
+    result = rng.choice(["H", "D", "A"], p=[p1, pd_, p2])
+    base_goals = rng.poisson(1.25, size=2)
+    if result == "D":
+        g = int(min(rng.poisson(1.1), 4))
+        return g, g
+    if result == "H":
+        s2 = int(base_goals[1])
+        s1 = max(int(base_goals[0]), s2 + 1)
+        return min(s1, 6), min(s2, 5)
+    s1 = int(base_goals[0])
+    s2 = max(int(base_goals[1]), s1 + 1)
+    return min(s1, 5), min(s2, 6)
+
+
+def simulate_advancement(matches: pd.DataFrame, n: int = 2000) -> pd.DataFrame:
+    rng = np.random.default_rng(42)
+    teams = sorted(set(matches["team1"]).union(matches["team2"]))
+    advance_counts = {t: 0 for t in teams}
+    group_win_counts = {t: 0 for t in teams}
+
+    for _ in range(n):
+        sim = matches.copy()
+        for idx, m in sim[sim["status"].ne("Complete")].iterrows():
+            s1, s2 = simulate_score(m["team1"], m["team2"], rng)
+            sim.loc[idx, ["score1", "score2", "status"]] = [s1, s2, "Complete"]
+
+        third_place = []
+        for group in sorted(sim["group"].unique()):
+            table = standings_for_group(sim, group)
+            top = table.iloc[0]
+            group_win_counts[top["Team"]] += 1
+            for team in table.head(2)["Team"]:
+                advance_counts[team] += 1
+            third = table.iloc[2].copy()
+            third["Group"] = group
+            third_place.append(third)
+
+        third_df = pd.DataFrame(third_place).sort_values(["Pts", "GD", "GF", "Team"], ascending=[False, False, False, True])
+        for team in third_df.head(8)["Team"]:
+            advance_counts[team] += 1
+
+    return pd.DataFrame({
+        "Team": teams,
+        "Advance %": [round(100 * advance_counts[t] / n, 1) for t in teams],
+        "Win Group %": [round(100 * group_win_counts[t] / n, 1) for t in teams],
+        "Elo": [BASE_ELO.get(t, 1500) for t in teams],
+    }).sort_values(["Advance %", "Win Group %", "Elo"], ascending=False)
+
+matches = normalize_scores(load_matches())
+
+with st.sidebar:
+    st.header("Settings")
+    sims = st.slider("Monte Carlo simulations", 500, 10000, 2000, step=500)
+    group_filter = st.selectbox("Group", ["All"] + sorted(matches["group"].unique()))
+    st.divider()
+    st.caption("Auto-update uses API-Football when you add an API_FOOTBALL_KEY in Streamlit secrets or your environment.")
+
+st.subheader("1) Update scores")
+st.write("Use the API update button when configured, or enter final scores directly in the table. When both scores are filled in, the match becomes Complete.")
+
+api_col1, api_col2 = st.columns([1, 2])
+with api_col1:
+    auto_update = st.button("Fetch latest scores from API", type="primary")
+with api_col2:
+    st.caption("No key yet? Keep using manual score entry. The button will explain what is missing.")
+
+if auto_update:
+    try:
+        api_results = fetch_api_football_results()
+        matches = normalize_scores(merge_results(matches, api_results))
+        st.success(f"Fetched {len(api_results)} fixtures/results and merged matching games into the app data.")
+        with st.expander("Preview API results"):
+            st.dataframe(api_results.head(25), use_container_width=True, hide_index=True)
+    except Exception as exc:
+        st.warning(f"Automatic update is not configured yet: {exc}")
+        st.info("To enable it, create an API-Football account, then add API_FOOTBALL_KEY to .streamlit/secrets.toml or Streamlit Cloud secrets.")
+editable_cols = ["date", "group", "team1", "team2", "score1", "score2", "status"]
+view = matches[editable_cols].copy()
+if group_filter != "All":
+    view = view[view["group"] == group_filter]
+
+edited = st.data_editor(
+    view,
+    use_container_width=True,
+    num_rows="fixed",
+    column_config={
+        "score1": st.column_config.NumberColumn("Score 1", min_value=0, step=1),
+        "score2": st.column_config.NumberColumn("Score 2", min_value=0, step=1),
+        "status": st.column_config.SelectboxColumn("Status", options=["Scheduled", "Complete"]),
+    },
+)
+
+# Merge edited view back into full dataframe for display/simulations.
+updated = matches.copy()
+for idx, row in edited.iterrows():
+    updated.loc[idx, ["score1", "score2", "status"]] = row[["score1", "score2", "status"]]
+updated = normalize_scores(updated)
+
+csv = updated.to_csv(index=False).encode("utf-8")
+st.download_button("Download updated matches.csv", csv, "matches.csv", "text/csv")
+
+st.subheader("2) Group standings")
+for group in sorted(updated["group"].unique()):
+    if group_filter not in ["All", group]:
+        continue
+    st.markdown(f"**Group {group}**")
+    st.dataframe(standings_for_group(updated, group), use_container_width=True, hide_index=True)
+
+st.subheader("3) Advancement odds")
+odds = simulate_advancement(updated, sims)
+st.dataframe(odds, use_container_width=True, hide_index=True)
+
+st.subheader("4) Upcoming match predictions")
+upcoming = updated[updated["status"].ne("Complete")].head(12).copy()
+if not upcoming.empty:
+    probs = []
+    for _, m in upcoming.iterrows():
+        p1, pd_, p2 = win_draw_loss_probs(m["team1"], m["team2"])
+        probs.append({
+            "Date": m["date"], "Group": m["group"], "Match": f"{m['team1']} vs {m['team2']}",
+            f"{m['team1']} win %": round(p1 * 100, 1), "Draw %": round(pd_ * 100, 1),
+            f"{m['team2']} win %": round(p2 * 100, 1),
+        })
+    st.dataframe(pd.DataFrame(probs), use_container_width=True, hide_index=True)
+else:
+    st.success("All listed matches are complete.")
+
+st.info("Version 2 includes the auto-score hook. Add an API-Football key to enable live fetches; otherwise the manual updater still works.")
