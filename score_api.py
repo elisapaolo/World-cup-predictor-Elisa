@@ -1,52 +1,24 @@
-# World Cup Predictor — Version 2
+import streamlit as st
+import requests
 
-This Streamlit app lets you update World Cup scores, recalculate group standings, and simulate advancement odds.
+def fetch_latest_scores():
+    api_key = st.secrets.get("API_FOOTBALL_KEY", None)
 
-## What is new in Version 2
+    if not api_key:
+        st.warning("API_FOOTBALL_KEY not configured.")
+        return None
 
-- Manual score entry still works.
-- A new **Fetch latest scores from API** button can pull scores from API-Football.
-- If no API key is configured, the app still runs and explains what is missing.
+    headers = {
+        "x-apisports-key": api_key
+    }
 
-## Run locally
+    url = "https://eur03.safelinks.protection.outlook.com/?url=https%3A%2F%2Fv3.football.api-sports.io%2Ffixtures%3Fleague%3D1%26season%3D2026&data=05%7C02%7Celisa.paolo%40sap.com%7Ca7e81b920a774fd6966708dec96ee792%7C42f7676cf455423c82f6dc2d99791af7%7C0%7C0%7C639169675359413419%7CUnknown%7CTWFpbGZsb3d8eyJFbXB0eU1hcGkiOnRydWUsIlYiOiIwLjAuMDAwMCIsIlAiOiJXaW4zMiIsIkFOIjoiTWFpbCIsIldUIjoyfQ%3D%3D%7C0%7C%7C%7C&sdata=twxcBDoae4KTq%2F6%2Bu9ElypxxaLiHPZ1roM7Rauvoey4%3D&reserved=0"
 
-```bash
-cd worldcup_predictor_app
-pip install -r requirements.txt
-streamlit run app.py
-```
+    response = requests.get(url, headers=headers)
 
-## Enable automatic score updates
+    if response.status_code == 200:
+        return response.json()
 
-1. Create an API-Football/API-Sports account.
-2. Get your API key.
-3. For local use, create this file:
-
-```bash
-mkdir -p .streamlit
-cp .streamlit_secrets_example.toml .streamlit/secrets.toml
-```
-
-4. Edit `.streamlit/secrets.toml` and paste your key:
-
-```toml
-API_FOOTBALL_KEY = "your_real_key_here"
-```
-
-5. Restart Streamlit and click **Fetch latest scores from API**.
-
-## Deploy to Streamlit Cloud
-
-1. Upload this folder to GitHub.
-2. Create a Streamlit Cloud app pointing to `app.py`.
-3. In Streamlit Cloud, go to **Settings > Secrets** and add:
-
-```toml
-API_FOOTBALL_KEY = "your_real_key_here"
-```
-
-4. Reboot the app.
-
-## Notes
-
+    st.error(f"API Error: {response.status_code}")
+    return None
 API-Football identifies the FIFA World Cup with `league=1` and `season=2026`. The app uses those defaults. The starter match file includes group-stage matches and the model uses starter Elo ratings that you can tune later.
