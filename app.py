@@ -5,7 +5,7 @@ from score_api import fetch_latest_scores
 st.set_page_config(page_title="World Cup Predictor", layout="wide")
 
 st.title("World Cup Predictor")
-st.write("View 2026 World Cup matches, scores, and prediction data.")
+st.write("2026 World Cup fixtures, scores, stages, and predictions.")
 
 if st.button("Fetch latest World Cup data"):
     data = fetch_latest_scores()
@@ -17,8 +17,10 @@ if st.button("Fetch latest World Cup data"):
             fixture = item["fixture"]
             teams = item["teams"]
             goals = item["goals"]
+            league = item["league"]
 
             fixtures.append({
+                "Stage": league.get("round", ""),
                 "Date": fixture["date"],
                 "Venue": fixture["venue"]["name"] if fixture.get("venue") else "",
                 "City": fixture["venue"]["city"] if fixture.get("venue") else "",
@@ -26,14 +28,52 @@ if st.button("Fetch latest World Cup data"):
                 "Away Team": teams["away"]["name"],
                 "Home Goals": goals["home"],
                 "Away Goals": goals["away"],
-                "Status": fixture["status"]["long"]
+                "Status": fixture["status"]["long"],
+                "Prediction": "Coming soon"
             })
 
         df = pd.DataFrame(fixtures)
 
-        st.success("API connected successfully.")
-        st.subheader("2026 World Cup Fixtures")
-        st.dataframe(df, use_container_width=True)
+        st.success(f"API connected successfully. {len(df)} matches loaded.")
+
+        group_tab, r32_tab, r16_tab, qf_tab, sf_tab, final_tab = st.tabs([
+            "Group Stage",
+            "Round of 32",
+            "Round of 16",
+            "Quarterfinals",
+            "Semifinals",
+            "Final"
+        ])
+
+        with group_tab:
+            group_df = df[df["Stage"].str.contains("Group", case=False, na=False)]
+            st.subheader("Group Stage Matches")
+            st.dataframe(group_df, use_container_width=True)
+
+        with r32_tab:
+            r32_df = df[df["Stage"].str.contains("Round of 32", case=False, na=False)]
+            st.subheader("Round of 32")
+            st.dataframe(r32_df, use_container_width=True)
+
+        with r16_tab:
+            r16_df = df[df["Stage"].str.contains("Round of 16", case=False, na=False)]
+            st.subheader("Round of 16")
+            st.dataframe(r16_df, use_container_width=True)
+
+        with qf_tab:
+            qf_df = df[df["Stage"].str.contains("Quarter", case=False, na=False)]
+            st.subheader("Quarterfinals")
+            st.dataframe(qf_df, use_container_width=True)
+
+        with sf_tab:
+            sf_df = df[df["Stage"].str.contains("Semi", case=False, na=False)]
+            st.subheader("Semifinals")
+            st.dataframe(sf_df, use_container_width=True)
+
+        with final_tab:
+            final_df = df[df["Stage"].str.contains("Final", case=False, na=False)]
+            st.subheader("Final")
+            st.dataframe(final_df, use_container_width=True)
 
     else:
         st.warning("No data returned. Check your API key or plan.")
