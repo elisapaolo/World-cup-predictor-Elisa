@@ -20,6 +20,11 @@ if st.button("Fetch latest World Cup data"):
             goals = item["goals"]
             league = item["league"]
 
+            prediction = predict_match(
+    teams["home"]["name"],
+    teams["away"]["name"]
+)
+
             fixtures.append({
                 "Stage": league.get("round", ""),
                 "Date": fixture["date"],
@@ -30,7 +35,11 @@ if st.button("Fetch latest World Cup data"):
                 "Home Goals": goals["home"],
                 "Away Goals": goals["away"],
                 "Status": fixture["status"]["long"],
-                "Prediction": "Coming soon"
+               "Pred Home Goals": prediction["pred_score1"],
+"Pred Away Goals": prediction["pred_score2"],
+"Home Win %": prediction["team1_win_pct"],
+"Draw %": prediction["draw_pct"],
+"Away Win %": prediction["team2_win_pct"],
             })
 
         df = pd.DataFrame(fixtures)
