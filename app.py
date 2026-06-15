@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from score_api import fetch_latest_scores
+from predictor import predict_match
 
 st.set_page_config(page_title="World Cup Predictor", layout="wide")
 
