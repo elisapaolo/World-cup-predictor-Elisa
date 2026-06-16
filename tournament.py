@@ -1,0 +1,5 @@
+calculate_group_standings()
+get_qualified_teams()
+build_round_of_32()
+simulate_knockout_round()
+simulate_full_tournament()
