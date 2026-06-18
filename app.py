@@ -92,8 +92,5 @@ if st.button("Fetch latest World Cup data"):
             st.subheader("Predicted Tournament Results")
             st.write(tournament_results)
 
-    else:
-        st.warning("No data returned. Check your API key or plan.")
-
-else:
+ else:
     st.info("Click the button above to fetch the latest World Cup data.")
