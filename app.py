@@ -48,15 +48,15 @@ if st.button("Fetch latest World Cup data"):
 
         st.success(f"API connected successfully. {len(df)} matches loaded.")
 
-group_tab, r32_tab, r16_tab, qf_tab, sf_tab, final_tab, prediction_tab = st.tabs([
-    "Group Stage",
-    "Round of 32",
-    "Round of 16",
-    "Quarterfinals",
-    "Semifinals",
-    "Final",
-    "Tournament Prediction"
-])
+    group_tab, r32_tab, r16_tab, qf_tab, sf_tab, final_tab, prediction_tab = st.tabs([
+        "Group Stage",
+        "Round of 32",
+        "Round of 16",
+        "Quarterfinals",
+        "Semifinals",
+        "Final",
+        "Tournament Prediction"
+    ])
 
     with group_tab:
             group_df = df[df["Stage"].str.contains("Group", case=False, na=False)]
