@@ -87,10 +87,10 @@ group_tab, r32_tab, r16_tab, qf_tab, sf_tab, final_tab, prediction_tab = st.tabs
             final_df = df[df["Stage"].str.contains("Final", case=False, na=False)]
             st.subheader("Final")
             st.dataframe(final_df, use_container_width=True)
-
-with prediction_tab:
-    st.subheader("Predicted Tournament Results")
-    st.write(tournament_results)
+            
+        with prediction_tab:
+            st.subheader("Predicted Tournament Results")
+            st.write(tournament_results)
 
     else:
         st.warning("No data returned. Check your API key or plan.")
