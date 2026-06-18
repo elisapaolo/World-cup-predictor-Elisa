@@ -58,37 +58,37 @@ group_tab, r32_tab, r16_tab, qf_tab, sf_tab, final_tab, prediction_tab = st.tabs
     "Tournament Prediction"
 ])
 
-        with group_tab:
+    with group_tab:
             group_df = df[df["Stage"].str.contains("Group", case=False, na=False)]
             st.subheader("Group Stage Matches")
             st.dataframe(group_df, use_container_width=True)
 
-        with r32_tab:
+    with r32_tab:
             r32_df = df[df["Stage"].str.contains("Round of 32", case=False, na=False)]
             st.subheader("Round of 32")
             st.dataframe(r32_df, use_container_width=True)
 
-        with r16_tab:
+    with r16_tab:
             r16_df = df[df["Stage"].str.contains("Round of 16", case=False, na=False)]
             st.subheader("Round of 16")
             st.dataframe(r16_df, use_container_width=True)
 
-        with qf_tab:
+    with qf_tab:
             qf_df = df[df["Stage"].str.contains("Quarter", case=False, na=False)]
             st.subheader("Quarterfinals")
             st.dataframe(qf_df, use_container_width=True)
 
-        with sf_tab:
+    with sf_tab:
             sf_df = df[df["Stage"].str.contains("Semi", case=False, na=False)]
             st.subheader("Semifinals")
             st.dataframe(sf_df, use_container_width=True)
 
-        with final_tab:
+    with final_tab:
             final_df = df[df["Stage"].str.contains("Final", case=False, na=False)]
             st.subheader("Final")
             st.dataframe(final_df, use_container_width=True)
             
-        with prediction_tab:
+    with prediction_tab:
             st.subheader("Predicted Tournament Results")
             st.write(tournament_results)
 
