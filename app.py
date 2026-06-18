@@ -91,6 +91,3 @@ if st.button("Fetch latest World Cup data"):
     with prediction_tab:
             st.subheader("Predicted Tournament Results")
             st.write(tournament_results)
-
- else:
-    st.info("Click the button above to fetch the latest World Cup data.")
